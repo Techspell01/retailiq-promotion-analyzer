@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Conversation } from './types';
-import { fetchConversations, ApiError } from './api';
+import { fetchConversations, extractPromotionName, ApiError } from './api';
 
 interface Props {
   onBack: () => void;
@@ -50,7 +50,7 @@ export default function ConversationsPage({ onBack, onResume }: Props) {
           <div style={s.list}>
             {conversations.map((c) => (
               <button key={c.conversation_id} style={s.convCard} onClick={() => onResume(c)}>
-                <div style={s.convTitle}>{cleanTitle(c.conversation_title)}</div>
+                <div style={s.convTitle}>{extractPromotionName(c)}</div>
                 <div style={s.convMeta}>{new Date(c.created_at).toLocaleString()}</div>
               </button>
             ))}
@@ -63,13 +63,6 @@ export default function ConversationsPage({ onBack, onResume }: Props) {
       `}</style>
     </div>
   );
-}
-
-function cleanTitle(title: string): string {
-  // "{promotion_id}-{promotion_name}-{created_at}" -> drop the leading id and trailing timestamp for readability
-  const parts = title.split('-');
-  if (parts.length > 2) return parts.slice(1, -1).join('-') || title;
-  return title;
 }
 
 const s: Record<string, React.CSSProperties> = {

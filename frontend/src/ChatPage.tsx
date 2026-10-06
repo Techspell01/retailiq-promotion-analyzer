@@ -56,7 +56,7 @@ export default function ChatPage({ clientEmail, chatCtx, onBack, onLogout }: Cha
   ];
 
   const promoTypeColor: Record<string, string> = {
-    'BOGO': '#00c8a0', 'Percentage Discount': '#7c6dfa',
+    'BOGO': '#00c8a0', 'Percentage Off': '#7c6dfa', 'Flash Sale': '#fa8c3e', 'Seasonal Sale': '#3ea6fa',
     'Bundle': '#fa8c3e', 'Clearance': '#ff4757',
   };
   const accentColor = promoTypeColor[promotion.promotion_type] ?? 'var(--accent)';

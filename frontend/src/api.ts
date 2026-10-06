@@ -1,4 +1,4 @@
-import { API_BASE_URL, API_V1 } from './config';
+import { API_V1 } from './config';
 import { getToken, clearToken } from './auth';
 import type { Promotion, Conversation } from './types';
 
@@ -45,7 +45,6 @@ async function request<T>(path: string, options: RequestInit = {}, auth = true):
   let res: Response;
   try {
     res = await fetch(`${API_V1}${path}`, { ...options, headers });
-    console.log(res)
   } catch {
     throw new ApiError(0, 'Could not reach the server. Please check your connection.');
   }
@@ -97,6 +96,12 @@ export async function fetchPromotionsPage(page: number): Promise<PromotionsPage>
     currentPage: res.current_page,
     maxPage: res.max_page,
   };
+}
+
+export async function fetchPromotion(promotionId: number): Promise<Promotion> {
+  const res = await request<ResponseModel<Promotion>>(`/promotions/${promotionId}`);
+  if (!res.data) throw new ApiError(res.status, res.message);
+  return res.data;
 }
 
 // ─── Data reload ───────────────────────────────────────────────

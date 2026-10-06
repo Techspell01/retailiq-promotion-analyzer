@@ -8,7 +8,7 @@ import ChatPage from './ChatPage';
 import ConversationsPage from './ConversationsPage';
 import type { AppScreen, ChatContext, Conversation } from './types';
 import { getUsername, clearToken, isAuthenticated } from './auth';
-import { setUnauthorizedHandler, extractPromotionName } from './api';
+import { setUnauthorizedHandler, extractPromotionName, fetchPromotion } from './api';
 import './index.css';
 
 export default function App() {
@@ -80,6 +80,14 @@ export default function App() {
             },
           });
           setScreen('chat');
+          // Fill in the promotion's details (type, discount, dates) for the sidebar.
+          if (conversation.promotion_id) {
+            fetchPromotion(conversation.promotion_id)
+              .then((promotion) => setChatCtx((ctx) =>
+                ctx && ctx.conversation.conversation_id === conversation.conversation_id ? { ...ctx, promotion } : ctx,
+              ))
+              .catch(() => { /* keep the placeholder */ });
+          }
         }}
       />
     );

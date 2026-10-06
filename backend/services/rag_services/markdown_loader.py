@@ -10,7 +10,7 @@ def chunk_markdown_by_heading(path: str) -> list[dict]:
 
     def flush():
         if current_lines:
-            current_lines.insert(0, current_heading)
+            current_lines.insert(0, current_heading + "\n")
             chunks.append({
                 "id": current_idx,
                 "text": "".join(current_lines).strip(),

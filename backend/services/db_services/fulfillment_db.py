@@ -1,4 +1,4 @@
-from  services.db_services.session import SessionLocal
+from services.db_services.session import SessionLocal, truncate_table
 from  services.db_services.models import FulfillmentHistory
 
 from sqlalchemy import text
@@ -18,7 +18,7 @@ def add_fulfillments(fulfillments: list[FulfillmentHistory]):
 def delete_all_fulfillments():
     session = SessionLocal()
     try:
-        session.execute(text("TRUNCATE TABLE fulfillment_history RESTART IDENTITY CASCADE;"))
+        truncate_table(session, "fulfillment_history")
         session.commit()
     except Exception as e:
         print(e)

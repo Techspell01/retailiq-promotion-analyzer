@@ -18,7 +18,9 @@ def add_user(username: str, password_hash: str):
 
 def get_user_by_username(username: str) -> User | None:
     session = SessionLocal()
-    statement = select(User).where(User.username == username)
-    user = session.scalar(statement)
-    return user
+    try:
+        statement = select(User).where(User.username == username)
+        return session.scalar(statement)
+    finally:
+        session.close()
 

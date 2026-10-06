@@ -1,5 +1,8 @@
 # Retail Promotions Performance Analyzer — Backend
 
+> Part of the combined RetailIQ project. For the one-command setup (no
+> PostgreSQL, Qdrant or embedding server needed) see the [root README](../README.md).
+
 A FastAPI backend that ingests retail sales/promotions data, stores it in a relational
 database, and exposes it through a REST + WebSocket API. A LangGraph-powered AI agent sits
 on top of the data, using dedicated KPI tools, SQL lookups, and a RAG-indexed sales
@@ -60,9 +63,9 @@ main.py                 App entrypoint
 
 - Python 3.12
 - [`uv`](https://docs.astral.sh/uv/) installed
-- A PostgreSQL database
-- A Qdrant instance (cloud or self-hosted)
-- A Cerebras API key (for the LLM used by the agent)
+- Optional: a PostgreSQL database (defaults to a local SQLite file)
+- Optional: a Qdrant instance (defaults to embedded Qdrant in `.qdrant/`)
+- Optional: an LLM API key, e.g. Cerebras (without one the chat answers from the KPI tools)
 
 ### Setup
 
@@ -72,14 +75,7 @@ main.py                 App entrypoint
    uv sync
    ```
 
-2. Create a `.env` file in the project root with:
-
-   ```
-   DB_CONN=postgresql://<user>:<password>@<host>:<port>/<database>
-   QDRANT_URL=<your-qdrant-url>
-   QDRANT_API_KEY=<your-qdrant-api-key>
-   CEREBRAS_API_KEY=<your-cerebras-api-key>
-   ```
+2. Copy `.env.example` to `.env` and fill in what you need (every setting is optional).
 
 3. Run the app:
 
@@ -87,17 +83,18 @@ main.py                 App entrypoint
    uv run main.py
    ```
 
-   On startup this initializes the database schema and creates a default user (see
-   `api/user_services/create_user.py`). The API is served by Uvicorn per the FastAPI app
-   defined in `api/api.py`.
+   On startup this initializes the database schema, creates the default user
+   (`admin` / `admin123`, see `bootstrap.py`), loads the data from the source API if the
+   database is empty, and indexes the RAG documents. Start the source API first with
+   `uv run python -m mock_source_api`.
 
 ### Loading data
 
 - **Initial/manual pipeline run:** trigger `POST /api/v1/data/reload` (authenticated) to
   pull the latest data from the external source APIs into the database.
-- **RAG index:** the sales guidebook markdown is chunked, embedded, and loaded into Qdrant
-  via `services/rag_services` — see the commented-out block at the top of `main.py` for the
-  one-off indexing call.
+- **RAG index:** the sales guidebook and promotion profiles in `documents/` are chunked,
+  embedded and loaded into Qdrant automatically on startup (`bootstrap.py`), and re-indexed
+  when they change.
 
 ## API overview
 
@@ -118,4 +115,5 @@ All routes are mounted under `/api/v1`. Except for `/user/login`, all routes req
 
 - Interactive API docs are available at `/docs` (Swagger UI) and `/redoc` once the server
   is running.
-- CORS is currently configured for a frontend running at `http://localhost:5173`.
+- CORS allows the Vite dev server (`http://localhost:5173`); override with `CORS_ORIGINS`.
+  When `../frontend/dist` exists the backend also serves the built frontend at `/`.

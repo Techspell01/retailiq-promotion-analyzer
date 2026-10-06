@@ -6,8 +6,10 @@ from services.pipeline_services.pipe import reload_data
 
 data_router = APIRouter(tags=["data"])
 
+# A plain `def` so FastAPI runs the (slow, blocking) reload in a worker thread
+# instead of freezing the event loop and every open chat socket with it.
 @data_router.post("/data/reload", tags=["data"])
-async def reload_data_from_api(user = Depends(auth_middleware)) -> ResponseModel:
+def reload_data_from_api(user = Depends(auth_middleware)) -> ResponseModel:
     try:
         reload_data()
         return ResponseModel(

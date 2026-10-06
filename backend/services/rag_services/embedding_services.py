@@ -1,10 +1,46 @@
-from huggingface_hub import InferenceClient
+from functools import lru_cache
 from pathlib import Path
-import json 
-from fastembed import SparseTextEmbedding, SparseEmbedding
+import json
+import os
 
-BASE_URL = "http://127.0.0.1:8080"
+from fastembed import SparseTextEmbedding, SparseEmbedding, TextEmbedding
+
+# Dense embeddings come from a Hugging Face text-embeddings-inference server
+# when EMBEDDING_SERVER_URL is set (the original setup used one on
+# http://127.0.0.1:8080), otherwise from a small fastembed model that runs
+# in-process on the CPU.
+EMBEDDING_SERVER_URL = os.getenv("EMBEDDING_SERVER_URL")
+DENSE_MODEL_NAME = os.getenv("DENSE_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 SPARSE_MODEL_NAME = "Qdrant/bm25"
+MODEL_CACHE_DIR = os.getenv("FASTEMBED_CACHE_DIR", str(Path(".cache") / "fastembed"))
+VECTOR_CACHE_DIR = Path("__embedded_vector_cache")
+
+
+@lru_cache(maxsize=1)
+def _dense_model() -> TextEmbedding:
+    return TextEmbedding(DENSE_MODEL_NAME, cache_dir=MODEL_CACHE_DIR)
+
+
+@lru_cache(maxsize=1)
+def _sparse_model() -> SparseTextEmbedding:
+    return SparseTextEmbedding(SPARSE_MODEL_NAME, cache_dir=MODEL_CACHE_DIR)
+
+
+def _embedding_source() -> str:
+    return EMBEDDING_SERVER_URL or DENSE_MODEL_NAME
+
+
+def embed_text(text: str) -> list:
+    if EMBEDDING_SERVER_URL:
+        from huggingface_hub import InferenceClient
+        embedded_text = InferenceClient(base_url=EMBEDDING_SERVER_URL).feature_extraction(text)
+        return embedded_text[0].tolist()
+    return next(iter(_dense_model().query_embed(text))).tolist()
+
+
+@lru_cache(maxsize=1)
+def dense_dimension() -> int:
+    return len(embed_text("dimension probe"))
 
 
 def embed_chunks(chunks: list[dict], name: str, force_invalidate_cache = False) -> list[dict]:
@@ -13,49 +49,41 @@ def embed_chunks(chunks: list[dict], name: str, force_invalidate_cache = False) 
         if embedded_chunks is not None:
             return embedded_chunks
 
-    client = InferenceClient(BASE_URL)
-    embedded_chunks = []
+    if EMBEDDING_SERVER_URL:
+        vectors = [embed_text(chunk["text"]) for chunk in chunks]
+    else:
+        vectors = [v.tolist() for v in _dense_model().passage_embed([c["text"] for c in chunks])]
 
-    total_chunks = len(chunks)
-    for idx, chunk in enumerate(chunks):
-        embedded_chunk = chunk
-        print(f"embedding chunk {idx +1 }/{total_chunks}")
-        embeddings = client.feature_extraction(chunk["text"])
-        print("Done")
-        embedded_chunk["embedding"]=embeddings[0].tolist()
-        embedded_chunks.append(embedded_chunk)
-    
+    embedded_chunks = []
+    for chunk, vector in zip(chunks, vectors):
+        embedded_chunks.append({**chunk, "embedding": vector})
+    print(f"embedded {len(embedded_chunks)} chunks for {name}")
+
     save_cache(embedded_chunks, name)
     return embedded_chunks
 
-def save_cache(chunks: list[dict], name: str): 
-    folder_path = Path("__embedded_vector_cache")
-    file_path = folder_path / f"__embedded_vector_{name}.json"
+def _cache_path(name: str) -> Path:
+    model_tag = _embedding_source().replace("/", "_").replace(":", "_")
+    return VECTOR_CACHE_DIR / f"__embedded_vector_{name}_{model_tag}.json"
 
-    folder_path.mkdir(parents=True, exist_ok=True)
-    with open(file_path, "w", encoding="utf-8") as file:
-        json.dump({"embedded_chunk": chunks}, file, indent=4)
+def save_cache(chunks: list[dict], name: str):
+    VECTOR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(_cache_path(name), "w", encoding="utf-8") as file:
+        json.dump({"embedded_chunk": chunks}, file)
 
 def load_from_cache(name: str) -> list[dict] | None:
-    file_path = Path(f"__embedded_vector_cache/embedded_vector_{name}.json")
+    file_path = _cache_path(name)
     if not file_path.exists():
         return None
-    with open(file_path,"r") as file:
+    with open(file_path, "r", encoding="utf-8") as file:
         data = json.load(file)
         return data["embedded_chunk"]
-    
-def embed_text(text: str) -> list:
-    inference_client = InferenceClient(base_url=BASE_URL)
-    embedded_text = inference_client.feature_extraction(text)
-    return embedded_text[0].tolist()
 
 def embed_sparse(chunks: list[dict]) -> list[dict]:
-    sparse_embedding_model = SparseTextEmbedding(SPARSE_MODEL_NAME)
-    sparse_vecs = list(sparse_embedding_model.embed([c["text"] for c in chunks]))
+    sparse_vecs = list(_sparse_model().embed([c["text"] for c in chunks]))
     for chunk, sparse_vec in zip(chunks, sparse_vecs):
         chunk["sparse_embeddings"] = sparse_vec
     return chunks
 
 def sparse_embed_text(text: str) -> SparseEmbedding:
-    sparse_embedding_model = SparseTextEmbedding(SPARSE_MODEL_NAME)
-    return list(sparse_embedding_model.embed(text))[0]
+    return next(iter(_sparse_model().query_embed(text)))

@@ -1,41 +1,42 @@
-from services.db_services.session import init_db
-from services.kpi_services.historic_kpi_calculators.historic_uplift import historic_uplift
-from api.user_services.create_user import create_user
-from api.api import get_app
-import uvicorn
-import os 
+import logging
+import os
+from pathlib import Path
 
-from services.rag_services.markdown_loader import chunk_markdown_by_heading
-from services.rag_services.embedding_services import embed_chunks
-from services.rag_services.qdrant_services import load_to_qdrant
-from langchain_openai import ChatOpenAI
-from services.rag_services.qdrant_services import PROMOTION_GUIDEBOOK_COLLECTION_NAME
+from dotenv import load_dotenv
+
+
+class _IgnoreConnectionReset(logging.Filter):
+    """Windows' asyncio logs a harmless traceback whenever a browser drops a
+    connection (WinError 10054); keep it out of the console."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (record.exc_info and isinstance(record.exc_info[1], ConnectionResetError))
+
+
+logging.getLogger("asyncio").addFilter(_IgnoreConnectionReset())
+
+# Relative paths (retailiq.db, documents/, .qdrant/) are relative to backend/.
+os.chdir(Path(__file__).resolve().parent)
+
+# Must run before the imports below: session.py and the agent read their
+# settings from the environment at import time.
+load_dotenv()
+
+import uvicorn
+
+from api.api import get_app
+from bootstrap import bootstrap
+
 
 def main():
 
-    # chunks = chunk_markdown_by_heading("documents/sales_guidebook.md")
-    # embeddings = embed_chunks(chunks, "sales_guidebook")
-    # load_to_qdrant(embeddings, collection=PROMOTION_GUIDEBOOK_COLLECTION_NAME)
-
-    init_db()
+    # Creates tables and the demo user, loads data on first run, and indexes
+    # documents/sales_guidebook.md and documents/promotion_profiles.pdf.
+    bootstrap()
     app = get_app()
 
-    uvicorn.run(app, env_file=".emv")
-
-    # llm = ChatOpenAI(
-    #     model="gpt-oss-120b",
-    #     api_key=os.getenv("CEREBRAS_API_KEY"),
-    #     base_url="https://api.cerebras.ai/v1",
-    #     default_headers={
-    #         "X-Cerebras-3rd-Party-Integration": "langgraph"
-    #     }
-    # )
-    # response = llm.invoke("hello how are you ")
-    # print(response.content)
-
-    
+    uvicorn.run(app, host=os.getenv("HOST", "127.0.0.1"), port=int(os.getenv("PORT", "8000")))
 
 
 if __name__ == "__main__":
     main()
-

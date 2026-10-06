@@ -1,4 +1,4 @@
-from  services.db_services.session import SessionLocal
+from services.db_services.session import SessionLocal, truncate_table
 from  services.db_services.models import Customer
 
 from  sqlalchemy import select, text
@@ -31,7 +31,7 @@ def customer_by_id(customer_id: int) -> Customer:
 def delete_all_customers():
     session = SessionLocal()
     try:
-        session.execute(text("TRUNCATE TABLE customer RESTART IDENTITY CASCADE;"))
+        truncate_table(session, "customer")
         session.commit()
     except Exception as e:
         print(e)

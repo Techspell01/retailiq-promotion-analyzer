@@ -9,8 +9,8 @@ class Uplift(BaseModel):
     promotion_units_sold: int
     baseline_revenue: float
     promotion_revenue: float
-    unit_sales_uplift: float
-    revenue_uplift: float
+    unit_sales_uplift: float | None
+    revenue_uplift: float | None
     sales_up_revenue_down: bool
     clean_win: bool
 

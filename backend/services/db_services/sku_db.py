@@ -1,4 +1,4 @@
-from  services.db_services.session import SessionLocal
+from services.db_services.session import SessionLocal, truncate_table
 from  services.db_services.models import Sku
 
 from sqlalchemy import select, text
@@ -30,7 +30,7 @@ def sku_by_id(sku_id: int) -> Sku:
 def delete_all_skus():
     session = SessionLocal() 
     try:
-        session.execute(text("TRUNCATE TABLE skus RESTART IDENTITY CASCADE;"))
+        truncate_table(session, "skus")
         session.commit()
     except Exception as e:
         print(e)

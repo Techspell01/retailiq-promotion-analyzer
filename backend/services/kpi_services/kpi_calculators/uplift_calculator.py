@@ -28,15 +28,16 @@ def uplift_calculator(session: Session, promotion: Promotion) -> Uplift:
     #     raise Exception("baseline sales query returned none")
     
     
-    unit_sale_uplift, revenue_uplift = float(0) , float(0)
-    if (baseline_units_sold !=0 and baseline_units_sold is not None ) or (baseline_revenue != 0 and baseline_revenue is not None):
-        unit_sale_uplift = ((promotion_units_sold - baseline_units_sold) / baseline_units_sold) * 100 # type: ignore
-        revenue_uplift = ((promotion_revenue - baseline_revenue)/ baseline_revenue) * 100 # type: ignore
+    # No baseline sales means there is nothing to compare against; the tool
+    # reports that instead of a misleading 0%.
+    unit_sale_uplift, revenue_uplift = None, None
+    if baseline_units_sold > 0 and baseline_revenue > 0:
+        unit_sale_uplift = ((promotion_units_sold - baseline_units_sold) / baseline_units_sold) * 100
+        revenue_uplift = ((promotion_revenue - baseline_revenue)/ baseline_revenue) * 100
 
-
-    print(unit_sale_uplift, revenue_uplift)
-    sales_up_revenue_down = True if unit_sale_uplift > 0 and revenue_uplift < 0 else False
-    clean_win = True if unit_sale_uplift  >0 and revenue_uplift > 0 else False
+    has_uplift = unit_sale_uplift is not None and revenue_uplift is not None
+    sales_up_revenue_down = has_uplift and unit_sale_uplift > 0 and revenue_uplift < 0
+    clean_win = has_uplift and unit_sale_uplift > 0 and revenue_uplift > 0
 
     return Uplift(
         promotion_id=promotion.promotion_id,

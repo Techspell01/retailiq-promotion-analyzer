@@ -9,6 +9,10 @@ wheels/
 # Virtual environments
 .venv
 .env
-/documents
 
 __embedded_vector_cache
+
+# Local runtime data (SQLite DB, embedded Qdrant, model and vector caches)
+retailiq.db
+.qdrant/
+.cache/

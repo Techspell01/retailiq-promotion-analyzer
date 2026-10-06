@@ -1,0 +1,54 @@
+# Full stack on the original infrastructure: PostgreSQL and a Qdrant server.
+#   docker compose up --build      then open http://localhost:8000
+# The LLM settings are read from backend/.env (see backend/.env.example).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: retailiq
+      POSTGRES_PASSWORD: retailiq
+      POSTGRES_DB: retailiq
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retailiq"]
+      interval: 3s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.0
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+  source-api:
+    build: .
+    command: ["python", "-m", "mock_source_api"]
+    environment:
+      SOURCE_API_HOST: 0.0.0.0
+
+  backend:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      source-api:
+        condition: service_started
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      DB_CONN: postgresql://retailiq:retailiq@postgres:5432/retailiq
+      QDRANT_URL: http://qdrant:6333
+      SOURCE_API_URL: http://source-api:3000/api/v1
+    volumes:
+      - modelcache:/app/backend/.cache
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
+  qdrantdata:
+  modelcache:

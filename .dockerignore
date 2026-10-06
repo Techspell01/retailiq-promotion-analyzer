@@ -1,0 +1,10 @@
+**/node_modules
+**/.venv
+**/dist
+**/.env
+**/__pycache__
+backend/retailiq.db
+backend/.qdrant
+backend/.cache
+backend/__embedded_vector_cache
+.git

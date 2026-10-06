@@ -26,7 +26,8 @@ A 7 to 10 minute live demo of RetailIQ, with talking points and backup plans.
 | 4 | Read the highlights | Units almost doubled (+99%) but revenue was flat (+0.3%). Discount efficiency is 0.00x: $1,892 of discount bought $6 of extra revenue. All 5 SKUs sold out by day 2-3, losing about 100 units. Afterwards sales fell to 0.44x of normal: pull-forward. |
 | 5 | Point at **Key Drivers** | The agent found in the promotion brief (RAG) that supply chain had warned of a delivery delay before launch. That's context the numbers alone can't give. |
 | 6 | Click the quick question **Which SKUs underperformed and why?**, then send | A follow-up in the same conversation, with history kept. |
-| 7 | (optional) Ask "What discount level would maximise ROI?" | Across all 38 promotions, 10-20% discounts return the most revenue per dollar of discount; deep discounts lose money. |
+| 7 | Ask "write a hello world program in Java" | It refuses: it's a specialist for promotion analysis, not a general chatbot. Off-topic requests are blocked before reaching the LLM, the prompt has a strict scope rule, and any reply containing program code is replaced. |
+| 7b | (optional) Ask "What discount level would maximise ROI?" | Across all 38 promotions, 10-20% discounts return the most revenue per dollar of discount; deep discounts lose money. |
 | 8 | Back to the dashboard, then **Past Conversations** | Conversations and messages are saved in the database and can be resumed. |
 | 9 | Show http://127.0.0.1:8000/docs | REST API plus a WebSocket for the chat. |
 
@@ -46,6 +47,9 @@ A 7 to 10 minute live demo of RetailIQ, with talking points and backup plans.
 
 **How do you stop the AI from making up numbers?**
 The system prompt forbids stating any figure that didn't come from a tool. All maths happens in deterministic Python KPI calculators; the LLM only chooses tools and explains the results. The SQL tool is read-only and enforced by the database.
+
+**Can it answer anything, like ChatGPT?**
+No, by design. Three layers keep it on topic: a pre-check that refuses obvious off-topic requests (code, trivia, creative writing) without calling the LLM, a strict scope rule in the system prompt (the model must reply with a refusal marker for anything outside retail promotion analysis), and a final check that replaces any reply containing program code.
 
 **Why LangGraph?**
 The agent is a loop: the model asks for tools, the tool node runs them (several in parallel), and the results go back to the model until it can answer. LangGraph makes that loop explicit, and lets us use different models without changing the tools.
@@ -70,6 +74,6 @@ No. The client's source system wasn't part of the project repositories, so a see
 | Problem | Fix |
 |---|---|
 | "Port 8000 is already in use" | An older RetailIQ window is still open. Close it, or restart the laptop. |
-| The answer ends with "Note: the AI model could not be reached" | Rate limit or no internet. The answer is still correct; wait a minute for the LLM, or carry on in tools-only mode. |
+| The answer ends with "Note: the AI language model is unavailable right now (...)" | The LLM's free usage limit was hit, or there's no internet. The numbers are still correct (they come from the same KPI tools); carry on, or switch to a key with more quota. |
 | Briefing takes more than 30 seconds | The LLM provider is slow. Keep talking through the architecture while it loads. |
 | Browser shows the login page again | The session expired (8 hours) or the tab was closed. Sign in again. |

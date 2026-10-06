@@ -155,10 +155,15 @@ def answer(question: str, promotion_id: Optional[int], llm_error: Exception | No
 
     if intent is None:
         parts = [
-            _uplift(promotion_id, question),
-            _efficiency(promotion_id, question),
-            "I can answer questions about stockouts, pull-forward, the audience, discount efficiency, "
-            "discount levels, similar promotions, the SKU breakdown, or KPI definitions from the guidebook.",
+            "I can only answer questions about this promotion's performance, and I couldn't match that "
+            "question to one of my analyses. You can ask about:",
+            _bullets([
+                "its sales uplift or discount efficiency",
+                "stockouts, or the dip after the promotion (pull-forward)",
+                "who bought it (age profile) and what the brief targeted",
+                "how it compares with similar promotions, or which discount level works best",
+                "which SKUs underperformed, or what a KPI means",
+            ]),
         ]
     else:
         parts = [HANDLERS[intent](promotion_id, question)]
@@ -410,8 +415,22 @@ def _bullets(items: list[str]) -> str:
 
 def _note(llm_error: Exception | None) -> str:
     if llm_error is None:
-        return ("Note: no LLM API key is configured, so this answer was assembled directly from the "
-                "KPI and search tools. Add a key in backend/.env to enable the conversational agent.")
-    reason = str(llm_error).splitlines()[0][:140] if str(llm_error) else llm_error.__class__.__name__
-    return ("Note: the AI model could not be reached (" + reason + "), so this answer was assembled "
-            "directly from the KPI and search tools.")
+        return ("Note: the AI language model is switched off (no API key in backend/.env), so this "
+                "answer comes straight from the KPI and search tools.")
+    return (f"Note: the AI language model is unavailable right now ({_describe(llm_error)}), so this "
+            "answer comes straight from the KPI and search tools. The numbers are the same; "
+            "only the wording is simpler.")
+
+
+def _describe(error: Exception) -> str:
+    """A plain-English reason; the full error is in the server log."""
+    text = f"{type(error).__name__} {error}".lower()
+    if any(k in text for k in ("resource_exhausted", "429", "rate limit", "ratelimit", "quota")):
+        return "its free usage limit has been reached"
+    if any(k in text for k in ("timeout", "timed out")):
+        return "it took too long to respond"
+    if any(k in text for k in ("connect", "network", "getaddrinfo", "name resolution", "unreachable")):
+        return "there is no internet connection"
+    if any(k in text for k in ("401", "403", "api key", "api_key", "permission", "unauthorized")):
+        return "the API key was rejected"
+    return "the AI service returned an error"

@@ -14,6 +14,7 @@ Every number in an answer comes from a deterministic KPI tool run against the sa
 - **Follow-up chat** over WebSockets, with history saved per conversation.
 - **Five KPI engines**: incremental uplift, discount efficiency, post-promotion dip (pull-forward), stockout trace with missed-sales estimate, and redemption demographics.
 - **Hybrid RAG**: dense embeddings plus BM25, fused with reciprocal rank fusion in Qdrant, over a sales guidebook and per-promotion briefs.
+- **Specialist, not a general chatbot**: questions outside retail promotion analysis (writing code, general knowledge, creative writing) get a fixed refusal. Obvious cases are caught before any LLM call, the prompt has a strict scope rule, and replies containing program code are blocked.
 - **Guarded SQL tool**: the agent can run ad-hoc read-only queries. They are checked, run in a read-only transaction, and kept away from the user and chat tables.
 - **ETL pipeline**: loads products, SKUs, customers, promotions, deliveries and sales from the source system. The **Refresh Data** button re-runs it.
 - **JWT login**, promotion library with search and paging, and past conversations you can resume.

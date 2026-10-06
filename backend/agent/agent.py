@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import time
 from functools import lru_cache
 from typing import Optional
 
@@ -18,7 +20,7 @@ from agent.agent_persistance import (
     save_user_message,
 )
 
-from agent import offline_agent
+from agent import offline_agent, scope_guard
 from tools.tools import tools
 TOOLS = tools
 
@@ -67,18 +69,49 @@ def _chat_model(model_name: str):
     )
 
 
+# A model that hit its rate limit is skipped until the provider says it can be
+# retried, instead of making every answer wait for another failing call.
+_cooldown_until: dict[str, float] = {}
+_cooldown_error: dict[str, Exception] = {}
+
+
+def is_rate_limit_error(e: Exception) -> bool:
+    text = f"{type(e).__name__} {e}".lower()
+    return any(k in text for k in ("resource_exhausted", "429", "rate limit", "ratelimit", "quota"))
+
+
+def _retry_after_seconds(e: Exception) -> float:
+    text = str(e)
+    m = re.search(r"retry in (?:(\d+)h)?(?:(\d+)m(?!s))?(?:([\d.]+)s)?", text)
+    if m and any(m.groups()):
+        hours, minutes, seconds = m.groups()
+        return int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds or 0)
+    m = re.search(r"retryDelay['\"]?:\s*['\"](\d+)s", text)
+    return float(m.group(1)) if m else 60.0
+
+
 async def _run_agent(state: AgentState) -> str:
     """One agent turn on the main model, retried from scratch on the fallback
     model if that fails. History is stored as plain text, so a turn can move
     between models safely."""
-    try:
-        return _final_text(await get_graph().ainvoke(state, {"recursion_limit": 40}))
-    except Exception:
-        if not LLM_FALLBACK_MODEL:
-            raise
-        logger.warning("main model %s failed, retrying the turn on %s", LLM_MODEL, LLM_FALLBACK_MODEL, exc_info=True)
-        fresh = {**state, "messages": list(state["messages"])}
-        return _final_text(await get_graph(LLM_FALLBACK_MODEL).ainvoke(fresh, {"recursion_limit": 40}))
+    last_error: Exception | None = None
+    for name in (m for m in (LLM_MODEL, LLM_FALLBACK_MODEL) if m):
+        if time.monotonic() < _cooldown_until.get(name, 0):
+            last_error = last_error or _cooldown_error.get(name)
+            continue
+        try:
+            fresh = {**state, "messages": list(state["messages"])}
+            return _final_text(await get_graph(name).ainvoke(fresh, {"recursion_limit": 40}))
+        except Exception as e:
+            last_error = e
+            if is_rate_limit_error(e):
+                wait = min(_retry_after_seconds(e), 24 * 3600)
+                _cooldown_until[name] = time.monotonic() + wait
+                _cooldown_error[name] = e
+                logger.warning("model %s hit its rate limit; skipping it for %.0f s", name, wait)
+            else:
+                logger.warning("model %s failed", name, exc_info=True)
+    raise last_error or RuntimeError("no LLM model is configured")
 
 
 @lru_cache(maxsize=2)
@@ -147,12 +180,16 @@ async def process_message(
     history = await load_lc_history(conversation_id)
     await save_user_message(conversation_id, message)
 
-    if llm_enabled():
+    if scope_guard.is_out_of_scope(message):
+        answer = scope_guard.REFUSAL
+    elif scope_guard.is_small_talk(message):
+        answer = scope_guard.SMALL_TALK_REPLY
+    elif llm_enabled():
         try:
             state = _build_initial_state(user_id, conversation_id, promotion_id, history, message)
-            answer = await _run_agent(state)
+            answer = scope_guard.enforce(await _run_agent(state))
         except Exception as e:
-            logger.exception("LLM agent failed, answering from the KPI tools instead")
+            logger.warning("LLM agent unavailable (%s), answering from the KPI tools instead", e.__class__.__name__)
             answer = await offline_agent.answer_async(message, promotion_id, llm_error=e)
     else:
         answer = await offline_agent.answer_async(message, promotion_id)
@@ -185,7 +222,7 @@ async def generate_initial_analysis(
         try:
             answer = await _run_agent(state)
         except Exception as e:
-            logger.exception("LLM agent failed, building the briefing from the KPI tools instead")
+            logger.warning("LLM agent unavailable (%s), building the briefing from the KPI tools instead", e.__class__.__name__)
             answer = await offline_agent.briefing_async(promotion_id, llm_error=e)
     else:
         answer = await offline_agent.briefing_async(promotion_id)
